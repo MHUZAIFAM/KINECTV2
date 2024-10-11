@@ -52,6 +52,12 @@ This project demonstrates how to connect and retrieve a color feed from the Kine
 7. **Link OpenCV Library**
    - Go to `Linker` > `Input` > `Additional Dependencies`.
    - Add `opencv_world4100d.lib`.
+
+8. **Usage**
+   - Connect the Kinect V2 sensor to your USB 3.0 port.
+   - Build and run the project in Visual Studio.
+   - If the Kinect sensor is not connected or fails to initialize, a message will appear in the terminal: `No Kinect V2 sensor connected!`.
+   - The color feed will display in an OpenCV window if the Kinect is successfully initialized.
      
 
 
