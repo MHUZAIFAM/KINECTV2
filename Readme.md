@@ -21,9 +21,9 @@ This project demonstrates how to connect and retrieve a color feed from the Kine
    ```
 
 2. **Open the Project in Visual Studio**
-   Open Visual Studio and create a new C++ project or open the provided solution file.
+   - Open Visual Studio and create a new C++ project or open the provided solution file.
 
-3. **Configure Kinect SDK Directories**
+4. **Configure Kinect SDK Directories**
    - Go to `Project Properties` > `Configuration Properties` > `VC++ Directories`.
    - Set up the following directories:
 
@@ -35,9 +35,24 @@ This project demonstrates how to connect and retrieve a color feed from the Kine
    ```bash
    C:\Program Files\Microsoft SDKs\Kinect\v2.0_1409\inc
    ```
-4. **Link Kinect Libraries**
+5. **Link Kinect Libraries**
    - Go to `Configuration Properties` > `Linker` > `Input` > `Additional Dependencies`.
    - Add `Kinect20.lib`.
+
+6. **Configure OpenCV Directories**
+   - Under VC++ Directories, add the following paths:
+   **Include Directories:**
+     ```bash
+     C:\opencv\build\include
+     ```
+   **Library Directories:**
+     ```bash
+     C:\opencv\build\x64\vc16\lib
+     ```
+7. **Link OpenCV Library**
+   - Go to `Linker` > `Input` > `Additional Dependencies`.
+   - Add `opencv_world4100d.lib`.
+     
 
 
    
