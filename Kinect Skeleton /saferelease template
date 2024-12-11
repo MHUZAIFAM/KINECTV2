@@ -1,0 +1,7 @@
+template<class Interface>
+inline void SafeRelease(Interface*& interfaceToRelease) {
+    if (interfaceToRelease) {
+        interfaceToRelease->Release();
+        interfaceToRelease = nullptr;
+    }
+}
