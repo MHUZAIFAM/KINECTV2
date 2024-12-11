@@ -1,0 +1,37 @@
+// Moving average window size
+const int SMOOTHING_WINDOW_SIZE = 5;
+
+// Timer variables
+bool isTiming = false;
+std::chrono::steady_clock::time_point startTime;
+std::chrono::steady_clock::time_point endTime;
+
+// Helper function to calculate the moving average of a deque
+float calculateMovingAverage(const std::deque<float>& values) {
+    if (values.empty()) return 0.0f;
+    float sum = std::accumulate(values.begin(), values.end(), 0.0f);
+    return sum / values.size();
+}
+
+// Timer logic
+void processWalkingTest(float depth) {
+    // Check for start condition (depth between 1.98m and 2.0m)
+    if (!isTiming && depth >= 1.98f && depth <= 2.0f) {
+        isTiming = true;
+        startTime = std::chrono::steady_clock::now();
+        std::cout << "Timer started! Depth: " << depth << "m" << std::endl;
+    }
+
+    // Check for stop condition (depth between 4.0m and 4.2m)
+    if (isTiming && depth >= 4.0f && depth <= 4.2f) {
+        endTime = std::chrono::steady_clock::now();
+        isTiming = false;
+
+        // Calculate elapsed time
+        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+        float elapsedSeconds = elapsedTime / 1000.0f;
+
+        std::cout << "Timer stopped! Depth: " << depth << "m" << std::endl;
+        std::cout << "Total time taken: " << std::fixed << std::setprecision(2) << elapsedSeconds << " seconds" << std::endl;
+    }
+}
