@@ -19,3 +19,14 @@ Depth of the person is printed on the right corner of the Live Feed
 
 ## Walking Speed Test V2
 Slightly improved version of V1, Now it prints on the screen as well the time it took to cover the distance of 5
+
+## Walking Speed Test V3
+Expected Outcome: 
+
+![image](https://github.com/user-attachments/assets/2063dd72-a5ef-497a-b6f2-9c834d166f63)
+
+On CLI it Prints as follows:
+
+![image](https://github.com/user-attachments/assets/053110c8-f07e-4c7f-afaa-717e72116a5a)
+
+Test can be performed multiple times, didnt dive into data logging yet though. Color scheme has to be matched for visually appealing and Bounding rect is remaining in the final code.
