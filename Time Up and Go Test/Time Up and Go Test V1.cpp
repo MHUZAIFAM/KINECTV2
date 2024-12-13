@@ -1,206 +1,236 @@
-#include <iostream>
 #include <Kinect.h>
 #include <opencv2/opencv.hpp>
+#include <iostream>
+#include <chrono>
 #include <deque>
 #include <numeric>
-#include <chrono>
 #include <iomanip>
-#include<iostream>
+#include <cmath>
+
 using namespace std;
 
-#pragma comment(lib, "kinect20.lib")
+// Skeleton bones definition
+const std::vector<std::pair<JointType, JointType>> bones = {
+    { JointType_Head, JointType_Neck },
+    { JointType_Neck, JointType_SpineShoulder },
+    { JointType_SpineShoulder, JointType_SpineMid },
+    { JointType_SpineMid, JointType_SpineBase },
+    { JointType_SpineShoulder, JointType_ShoulderLeft },
+    { JointType_SpineShoulder, JointType_ShoulderRight },
+    { JointType_SpineBase, JointType_HipLeft },
+    { JointType_SpineBase, JointType_HipRight },
+    { JointType_ShoulderLeft, JointType_ElbowLeft },
+    { JointType_ElbowLeft, JointType_WristLeft },
+    { JointType_WristLeft, JointType_HandLeft },
+    { JointType_ShoulderRight, JointType_ElbowRight },
+    { JointType_ElbowRight, JointType_WristRight },
+    { JointType_WristRight, JointType_HandRight },
+    { JointType_HipLeft, JointType_KneeLeft },
+    { JointType_KneeLeft, JointType_AnkleLeft },
+    { JointType_AnkleLeft, JointType_FootLeft },
+    { JointType_HipRight, JointType_KneeRight },
+    { JointType_KneeRight, JointType_AnkleRight },
+    { JointType_AnkleRight, JointType_FootRight }
+};
 
-template<class Interface>
-inline void SafeRelease(Interface*& interfaceToRelease) {
-    if (interfaceToRelease) {
-        interfaceToRelease->Release();
-        interfaceToRelease = nullptr;
-    }
-}
-
-// Moving average filter
-float getSmoothedDepth(std::deque<float>& depthQueue, float newDepth, size_t windowSize) {
-    depthQueue.push_back(newDepth);
-    if (depthQueue.size() > windowSize) {
-        depthQueue.pop_front();
-    }
-    float sum = std::accumulate(depthQueue.begin(), depthQueue.end(), 0.0f);
-    return sum / depthQueue.size();
-}
+// Constants
+const float CHAIR_DEPTH = 4.0f;        // Depth when sitting on the chair
+const float TARGET_DEPTH = 1.0f;      // Target depth during walking
+const float Y_CHANGE_THRESHOLD = 0.1f; // Threshold for Y-coordinate change
+const float DEPTH_TOLERANCE = 0.1f;   // Allowable error in depth comparison
+const float Y_COORD_TOLERANCE = 0.05f; // Allowable error in Y-coordinate comparison
 
 // Timer variables
 bool isTiming = false;
+bool reachedTargetDepth = false;
 std::chrono::steady_clock::time_point startTime;
 std::chrono::steady_clock::time_point endTime;
 
-// Helper function to calculate the moving average of a deque
-float calculateMovingAverage(const std::deque<float>& values) {
-    if (values.empty()) return 0.0f;
-    float sum = std::accumulate(values.begin(), values.end(), 0.0f);
-    return sum / values.size();
+// Initial Y-coordinate for validation
+float initialYCoordinate = -1.0f;
+
+// Timer functions
+void startTimer(float depth, float yCoordinate) {
+    isTiming = true;
+    reachedTargetDepth = false; // Reset target depth tracking
+    startTime = std::chrono::steady_clock::now();
+    cout << "Timer started! Depth: " << depth << "m, Y-coordinate: " << yCoordinate << endl;
 }
 
-// Timer logic for walking test
-// Variables for displaying timer information
-std::string timerMessage = "";
-float timerStartDepth = 0.0f;
-float timerStopDepth = 0.0f;
+void stopTimer(float depth, float yCoordinate) {
+    endTime = std::chrono::steady_clock::now();
+    isTiming = false;
 
-void processWalkingTest(float depth, std::string& timerMessage) {
-    // Check for start condition (depth between 5.98m and 6.0m)
-    if (!isTiming && depth >= 5.99f && depth <= 6.0f) {
-        isTiming = true;
-        startTime = std::chrono::steady_clock::now();
-        timerMessage = "Timer Started! Depth: " + std::to_string(depth).substr(0, 4) + " m";
-        std::cout << "Timer Started! Depth: " << depth << endl;
+    auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
+    float elapsedSeconds = elapsedTime / 1000.0f;
 
+    cout << "Timer stopped! Depth: " << depth << "m, Y-coordinate: " << yCoordinate << endl;
+    cout << "Total time taken: " << fixed << setprecision(2) << elapsedSeconds << " seconds" << endl;
+
+    // Reset for the next test
+    initialYCoordinate = -1.0f;
+}
+
+// Process walking test logic
+void processWalkingTest(float depth, float yCoordinate) {
+    if (initialYCoordinate == -1.0f && fabs(depth - CHAIR_DEPTH) < DEPTH_TOLERANCE) {
+        initialYCoordinate = yCoordinate; // Save initial Y-coordinate
+        cout << "Person detected sitting on the chair. Depth: " << depth << "m" << endl;
+        return;
     }
 
-    // Check for stop condition (depth between 0.98m and 1.0m)
-    if (isTiming && depth >= 1.0f && depth <= 1.1f) {
-        endTime = std::chrono::steady_clock::now();     
-        isTiming = false;
+    // Start timer when Y-coordinate changes (person is getting up)
+    if (!isTiming && fabs(yCoordinate - initialYCoordinate) > Y_CHANGE_THRESHOLD) {
+        startTimer(depth, yCoordinate);
+    }
 
-        // Calculate elapsed time
-        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
-        float elapsedSeconds = elapsedTime / 1000.0f;
+    // During timing, check for target depth (1 meter)
+    if (isTiming && fabs(depth - TARGET_DEPTH) < DEPTH_TOLERANCE) {
+        reachedTargetDepth = true;
+        cout << "Target depth reached: " << depth << "m" << endl;
+    }
 
-        timerMessage = "Timer stopped! Depth: " + std::to_string(depth).substr(0, 4) + " m " + 
-            "Time Taken: " + std::to_string(elapsedSeconds).substr(0, 5) + " s";
-        cout << "Timer Stopped! Depth "<< depth << "\nTime: " << elapsedSeconds << " s" << endl;
+    // Stop timer when person returns to chair depth and initial Y-coordinate
+    if (isTiming && reachedTargetDepth &&
+        fabs(depth - CHAIR_DEPTH) < DEPTH_TOLERANCE &&
+        fabs(yCoordinate - initialYCoordinate) < Y_COORD_TOLERANCE) {
+        stopTimer(depth, yCoordinate);
     }
 }
 
+// Main program
 int main() {
-    // Initialize Kinect sensor
-    IKinectSensor* kinectSensor = nullptr;
-    HRESULT hr = GetDefaultKinectSensor(&kinectSensor);
-
-    if (FAILED(hr) || !kinectSensor) {
-        std::cerr << "Failed to initialize Kinect sensor!" << std::endl;
-        return -1;
-    }
-
-    hr = kinectSensor->Open();
-    if (FAILED(hr)) {
-        std::cerr << "Failed to open Kinect sensor!" << std::endl;
-        return -1;
-    }
-
-    // Depth frame reader
-    IDepthFrameReader* depthFrameReader = nullptr;
-    IDepthFrameSource* depthFrameSource = nullptr;
-
-    hr = kinectSensor->get_DepthFrameSource(&depthFrameSource);
-    if (FAILED(hr) || !depthFrameSource) {
-        std::cerr << "Failed to get Depth Frame Source!" << std::endl;
-        return -1;
-    }
-
-    hr = depthFrameSource->OpenReader(&depthFrameReader);
-    if (FAILED(hr) || !depthFrameReader) {
-        std::cerr << "Failed to open Depth Frame Reader!" << std::endl;
-        return -1;
-    }
-
-    // Color frame reader
+    IKinectSensor* sensor = nullptr;
     IColorFrameReader* colorFrameReader = nullptr;
-    IColorFrameSource* colorFrameSource = nullptr;
+    IBodyFrameReader* bodyFrameReader = nullptr;
+    ICoordinateMapper* coordinateMapper = nullptr;
 
-    hr = kinectSensor->get_ColorFrameSource(&colorFrameSource);
-    if (FAILED(hr) || !colorFrameSource) {
-        std::cerr << "Failed to get Color Frame Source!" << std::endl;
+    if (FAILED(GetDefaultKinectSensor(&sensor)) || !sensor) {
+        cerr << "Kinect sensor not found!" << endl;
         return -1;
     }
 
-    hr = colorFrameSource->OpenReader(&colorFrameReader);
-    if (FAILED(hr) || !colorFrameReader) {
-        std::cerr << "Failed to open Color Frame Reader!" << std::endl;
-        return -1;
-    }
+    sensor->Open();
+    sensor->get_CoordinateMapper(&coordinateMapper);
 
-    // Depth frame properties
-    int depthWidth = 0, depthHeight = 0;
-    IFrameDescription* depthFrameDescription = nullptr;
-    depthFrameSource->get_FrameDescription(&depthFrameDescription);
-    depthFrameDescription->get_Width(&depthWidth);
-    depthFrameDescription->get_Height(&depthHeight);
-    SafeRelease(depthFrameDescription);
+    IColorFrameSource* colorSource = nullptr;
+    sensor->get_ColorFrameSource(&colorSource);
+    colorSource->OpenReader(&colorFrameReader);
 
-    // Depth buffer and smoothing
-    std::vector<UINT16> depthBuffer(depthWidth * depthHeight);
-    std::deque<float> depthQueue; // To store depth values for smoothing
-    const size_t smoothingWindowSize = 10; // Adjust smoothing window size as needed
+    IBodyFrameSource* bodySource = nullptr;
+    sensor->get_BodyFrameSource(&bodySource);
+    bodySource->OpenReader(&bodyFrameReader);
 
-    // Main loop
-    // Main loop
-while (true) {
-    // Get Depth Frame
-    IDepthFrame* depthFrame = nullptr;
-    hr = depthFrameReader->AcquireLatestFrame(&depthFrame);
+    cv::namedWindow("Kinect Walking Test", cv::WINDOW_AUTOSIZE);
 
-    if (SUCCEEDED(hr)) {
-        hr = depthFrame->CopyFrameDataToArray(static_cast<UINT>(depthBuffer.size()), &depthBuffer[0]);
+    while (true) {
+        IColorFrame* colorFrame = nullptr;
+        HRESULT hrColor = colorFrameReader->AcquireLatestFrame(&colorFrame);
 
-        if (SUCCEEDED(hr)) {
-            // Find the closest depth value in the center of the frame
-            int centerX = depthWidth / 2;
-            int centerY = depthHeight / 2;
-            int index = centerY * depthWidth + centerX;
-            UINT16 depthValue = depthBuffer[index];
+        if (SUCCEEDED(hrColor)) {
+            IFrameDescription* frameDescription = nullptr;
+            colorFrame->get_FrameDescription(&frameDescription);
 
-            // Convert depth to meters and smooth it
-            float depthInMeters = depthValue * 0.001f;
-            float smoothedDepth = getSmoothedDepth(depthQueue, depthInMeters, smoothingWindowSize);
+            int width, height;
+            frameDescription->get_Width(&width);
+            frameDescription->get_Height(&height);
 
-            // Process the walking test timer
-            processWalkingTest(smoothedDepth, timerMessage);
+            UINT bufferSize = width * height * 4;
+            BYTE* colorBuffer = new BYTE[bufferSize];
+            hrColor = colorFrame->CopyConvertedFrameDataToArray(bufferSize, colorBuffer, ColorImageFormat_Bgra);
 
-            // Get color frame for live feed
-            IColorFrame* colorFrame = nullptr;
-            hr = colorFrameReader->AcquireLatestFrame(&colorFrame);
+            if (SUCCEEDED(hrColor)) {
+                cv::Mat colorMat(height, width, CV_8UC4, colorBuffer);
+                cv::Mat bgrMat;
+                cv::cvtColor(colorMat, bgrMat, cv::COLOR_BGRA2BGR);
 
-            if (SUCCEEDED(hr)) {
-                int colorWidth = 0, colorHeight = 0;
-                IFrameDescription* colorFrameDescription = nullptr;
-                colorFrame->get_FrameDescription(&colorFrameDescription);
-                colorFrameDescription->get_Width(&colorWidth);
-                colorFrameDescription->get_Height(&colorHeight);
-                SafeRelease(colorFrameDescription);
+                IBodyFrame* bodyFrame = nullptr;
+                HRESULT hrBody = bodyFrameReader->AcquireLatestFrame(&bodyFrame);
 
-                // Prepare frame buffer
-                std::vector<BYTE> colorBuffer(colorWidth * colorHeight * 4); // BGRA
-                hr = colorFrame->CopyConvertedFrameDataToArray(static_cast<UINT>(colorBuffer.size()), colorBuffer.data(), ColorImageFormat_Bgra);
+                if (SUCCEEDED(hrBody)) {
+                    IBody* bodies[BODY_COUNT] = { 0 };
+                    hrBody = bodyFrame->GetAndRefreshBodyData(_countof(bodies), bodies);
 
-                if (SUCCEEDED(hr)) {
-                    // Create OpenCV Mat and display it
-                    cv::Mat colorMat(colorHeight, colorWidth, CV_8UC4, colorBuffer.data());
+                    for (int i = 0; i < BODY_COUNT; ++i) {
+                        IBody* body = bodies[i];
+                        if (body) {
+                            BOOLEAN isTracked = false;
+                            body->get_IsTracked(&isTracked);
 
-                    // Display depth and timer information
-                    cv::putText(colorMat, "Depth: " + std::to_string(smoothedDepth).substr(0, 4) + " m",
-                                cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
-                    cv::putText(colorMat, timerMessage, cv::Point(50, 100),
-                                cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
+                            if (isTracked) {
+                                Joint joints[JointType_Count];
+                                body->GetJoints(_countof(joints), joints);
 
-                    cv::imshow("Kinect Live Feed", colorMat);
-                    if (cv::waitKey(30) == 27) break; // Exit on ESC key
+                                // Draw skeleton
+                                for (const auto& bone : bones) {
+                                    Joint joint1 = joints[bone.first];
+                                    Joint joint2 = joints[bone.second];
+
+                                    if (joint1.TrackingState == TrackingState_Tracked && joint2.TrackingState == TrackingState_Tracked) {
+                                        ColorSpacePoint colorPoint1, colorPoint2;
+                                        coordinateMapper->MapCameraPointToColorSpace(joint1.Position, &colorPoint1);
+                                        coordinateMapper->MapCameraPointToColorSpace(joint2.Position, &colorPoint2);
+
+                                        int x1 = static_cast<int>(colorPoint1.X);
+                                        int y1 = static_cast<int>(colorPoint1.Y);
+                                        int x2 = static_cast<int>(colorPoint2.X);
+                                        int y2 = static_cast<int>(colorPoint2.Y);
+
+                                        if (x1 >= 0 && x1 < width && y1 >= 0 && y1 < height &&
+                                            x2 >= 0 && x2 < width && y2 >= 0 && y2 < height) {
+                                            cv::line(bgrMat, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(0, 255, 0), 2);
+                                        }
+                                    }
+                                }
+
+                                // Process SpineMid joint
+                                Joint spineMid = joints[JointType_SpineMid];
+                                if (spineMid.TrackingState == TrackingState_Tracked) {
+                                    float depth = spineMid.Position.Z;
+                                    float yCoordinate = spineMid.Position.Y;
+
+                                    // Display depth and Y-coordinate
+                                    ColorSpacePoint spineMidPoint;
+                                    coordinateMapper->MapCameraPointToColorSpace(spineMid.Position, &spineMidPoint);
+
+                                    int x = static_cast<int>(spineMidPoint.X);
+                                    int y = static_cast<int>(spineMidPoint.Y);
+
+                                    if (x >= 0 && x < width && y >= 0 && y < height) {
+                                        cv::putText(bgrMat, "Depth: " + to_string(depth) + "m",
+                                            cv::Point(x, y - 40), cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                                            cv::Scalar(0, 0, 255), 2);
+                                        cv::putText(bgrMat, "Y: " + to_string(yCoordinate) + "m",
+                                            cv::Point(x, y - 20), cv::FONT_HERSHEY_SIMPLEX, 0.6,
+                                            cv::Scalar(0, 255, 0), 2);
+                                    }
+
+                                    // Process walking test logic
+                                    processWalkingTest(depth, yCoordinate);
+                                }
+                            }
+                        }
+                    }
+
+                    bodyFrame->Release();
                 }
+
+                cv::imshow("Kinect Walking Test", bgrMat);
             }
 
-            SafeRelease(colorFrame);
+            delete[] colorBuffer;
+        }
+
+        if (colorFrame) {
+            colorFrame->Release();
+        }
+
+        if (cv::waitKey(30) == 27) {
+            break;
         }
     }
 
-    SafeRelease(depthFrame);
-}
-
-    // Clean up
-    SafeRelease(depthFrameReader);
-    SafeRelease(depthFrameSource);
-    SafeRelease(colorFrameReader);
-    SafeRelease(colorFrameSource);
-    if (kinectSensor) kinectSensor->Close();
-    SafeRelease(kinectSensor);
-
+    sensor->Close();
+    cv::destroyAllWindows();
     return 0;
 }
