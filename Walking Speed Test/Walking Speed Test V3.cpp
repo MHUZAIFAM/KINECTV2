@@ -43,22 +43,24 @@ float calculateMovingAverage(const std::deque<float>& values) {
 // Timer logic for walking test
 // Variables for displaying timer information
 std::string timerMessage = "";
+std::string timerStartedMessage = "";
+std::string timerStoppedMessage = "";
+std::string liveDepthMessage = "";
 float timerStartDepth = 0.0f;
 float timerStopDepth = 0.0f;
 float finalElapsedSeconds = 0.0f; // Store final elapsed time
-
 
 void processWalkingTest(float depth, std::string& timerMessage) {
     // Check for start condition (depth between 5.98m and 6.0m)
     if (!isTiming && depth >= 5.99f && depth <= 6.0f) {
         isTiming = true;
         startTime = std::chrono::steady_clock::now();
-        timerMessage = "Timer Started! Depth: " + std::to_string(depth).substr(0, 4) + " m";
+        timerStartedMessage = "Timer Started! Depth: " + std::to_string(depth).substr(0, 4) + " m";
         std::cout << "Timer Started! Depth: " << depth << endl;
     }
 
     // Check for stop condition (depth between 0.98m and 1.0m)
-    if (isTiming && depth >= 1.0f && depth <= 1.1f) {
+    if (isTiming && depth >= 0.99f && depth <= 1.0f) {
         endTime = std::chrono::steady_clock::now();
         isTiming = false;
 
@@ -66,12 +68,14 @@ void processWalkingTest(float depth, std::string& timerMessage) {
         auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(endTime - startTime).count();
         finalElapsedSeconds = elapsedTime / 1000.0f; // Save the final elapsed time
 
-        timerMessage = "Timer stopped! Depth: " + std::to_string(depth).substr(0, 4) + " m " +
+        timerStoppedMessage = "Timer Stopped! Depth: " + std::to_string(depth).substr(0, 4) + " m " +
             "Time Taken: " + std::to_string(finalElapsedSeconds).substr(0, 5) + " s";
         std::cout << "Timer Stopped! Depth: " << depth << "\nTime: " << finalElapsedSeconds << " s" << std::endl;
     }
-}
 
+    // Display live depth value
+    liveDepthMessage = "Depth: " + std::to_string(depth).substr(0, 4) + " m";
+}
 int main() {
     // Initialize Kinect sensor
     IKinectSensor* kinectSensor = nullptr;
@@ -135,79 +139,82 @@ int main() {
 
     // Main loop
     // Main loop
-while (true) {
-    // Get Depth Frame
-    IDepthFrame* depthFrame = nullptr;
-    hr = depthFrameReader->AcquireLatestFrame(&depthFrame);
-
-    if (SUCCEEDED(hr)) {
-        hr = depthFrame->CopyFrameDataToArray(static_cast<UINT>(depthBuffer.size()), &depthBuffer[0]);
+    while (true) {
+        // Get Depth Frame and process
+        IDepthFrame* depthFrame = nullptr;
+        hr = depthFrameReader->AcquireLatestFrame(&depthFrame);
 
         if (SUCCEEDED(hr)) {
-            // Find the closest depth value in the center of the frame
-            int centerX = depthWidth / 2;
-            int centerY = depthHeight / 2;
-            int index = centerY * depthWidth + centerX;
-            UINT16 depthValue = depthBuffer[index];
-
-            // Convert depth to meters and smooth it
-            float depthInMeters = depthValue * 0.001f;
-            float smoothedDepth = getSmoothedDepth(depthQueue, depthInMeters, smoothingWindowSize);
-
-            // Process the walking test timer
-            processWalkingTest(smoothedDepth, timerMessage);
-
-            // Get color frame for live feed
-            IColorFrame* colorFrame = nullptr;
-            hr = colorFrameReader->AcquireLatestFrame(&colorFrame);
+            hr = depthFrame->CopyFrameDataToArray(static_cast<UINT>(depthBuffer.size()), &depthBuffer[0]);
 
             if (SUCCEEDED(hr)) {
-                int colorWidth = 0, colorHeight = 0;
-                IFrameDescription* colorFrameDescription = nullptr;
-                colorFrame->get_FrameDescription(&colorFrameDescription);
-                colorFrameDescription->get_Width(&colorWidth);
-                colorFrameDescription->get_Height(&colorHeight);
-                SafeRelease(colorFrameDescription);
+                // Find the closest depth value in the center of the frame
+                int centerX = depthWidth / 2;
+                int centerY = depthHeight / 2;
+                int index = centerY * depthWidth + centerX;
+                UINT16 depthValue = depthBuffer[index];
 
-                // Prepare frame buffer
-                std::vector<BYTE> colorBuffer(colorWidth * colorHeight * 4); // BGRA
-                hr = colorFrame->CopyConvertedFrameDataToArray(static_cast<UINT>(colorBuffer.size()), colorBuffer.data(), ColorImageFormat_Bgra);
+                // Convert depth to meters and smooth it
+                float depthInMeters = depthValue * 0.001f;
+                float smoothedDepth = getSmoothedDepth(depthQueue, depthInMeters, smoothingWindowSize);
+
+                // Process the walking test timer
+                processWalkingTest(smoothedDepth, timerMessage);
+
+                // Get color frame for live feed
+                IColorFrame* colorFrame = nullptr;
+                hr = colorFrameReader->AcquireLatestFrame(&colorFrame);
 
                 if (SUCCEEDED(hr)) {
-                    // Create OpenCV Mat and display it
-                    cv::Mat colorMat(colorHeight, colorWidth, CV_8UC4, colorBuffer.data());
+                    int colorWidth = 0, colorHeight = 0;
+                    IFrameDescription* colorFrameDescription = nullptr;
+                    colorFrame->get_FrameDescription(&colorFrameDescription);
+                    colorFrameDescription->get_Width(&colorWidth);
+                    colorFrameDescription->get_Height(&colorHeight);
+                    SafeRelease(colorFrameDescription);
 
-                    // Display depth and timer information
-                    cv::putText(colorMat, "Depth: " + std::to_string(smoothedDepth).substr(0, 4) + " m",
-                                cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
-                    cv::putText(colorMat, timerMessage, cv::Point(50, 100),
+                    // Prepare frame buffer
+                    std::vector<BYTE> colorBuffer(colorWidth * colorHeight * 4); // BGRA
+                    hr = colorFrame->CopyConvertedFrameDataToArray(static_cast<UINT>(colorBuffer.size()), colorBuffer.data(), ColorImageFormat_Bgra);
+
+                    if (SUCCEEDED(hr)) {
+                        // Create OpenCV Mat and display it
+                        cv::Mat colorMat(colorHeight, colorWidth, CV_8UC4, colorBuffer.data());
+
+                        // Display the messages
+                        cv::putText(colorMat, liveDepthMessage, cv::Point(50, 50), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 0), 2);
+                        if (!timerStartedMessage.empty()) {
+                            cv::putText(colorMat, timerStartedMessage, cv::Point(50, 100),
                                 cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
-                    //to display timer on the screen 
-                    if (isTiming) {
-                        auto currentTime = std::chrono::steady_clock::now();
-                        auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
-                        float elapsedSeconds = elapsedTime / 1000.0f;
-                        cv::putText(colorMat, "Timer: " + std::to_string(elapsedSeconds).substr(0, 5) + " s",
-                            cv::Point(50, 150), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
-                    }
-                    else if (finalElapsedSeconds > 0.0f) { // Display final time if the timer has stopped
-                        cv::putText(colorMat, "Final Time: " + std::to_string(finalElapsedSeconds).substr(0, 5) + " s",
-                            cv::Point(50, 150), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
-                    }
+                        }
+                        if (!timerStoppedMessage.empty()) {
+                            cv::putText(colorMat, timerStoppedMessage, cv::Point(50, 150),
+                                cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
+                        }
+                        if (isTiming) {
+                            auto currentTime = std::chrono::steady_clock::now();
+                            auto elapsedTime = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count();
+                            float elapsedSeconds = elapsedTime / 1000.0f;
+                            cv::putText(colorMat, "Timer: " + std::to_string(elapsedSeconds).substr(0, 5) + " s",
+                                cv::Point(50, 200), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
+                        }
+                        else if (finalElapsedSeconds > 0.0f) {
+                            cv::putText(colorMat, "Final Time: " + std::to_string(finalElapsedSeconds).substr(0, 5) + " s",
+                                cv::Point(50, 200), cv::FONT_HERSHEY_SIMPLEX, 1.0, cv::Scalar(0, 255, 255), 2);
+                        }
 
-
-                    cv::imshow("Kinect Live Feed", colorMat);
-                    if (cv::waitKey(30) == 27) break; // Exit on ESC key
+                        // Display the frame
+                        cv::imshow("Kinect Live Feed", colorMat);
+                        if (cv::waitKey(30) == 27) break; // Exit on ESC key
+                    }
                 }
+
+                SafeRelease(colorFrame);
             }
-
-            SafeRelease(colorFrame);
         }
+
+        SafeRelease(depthFrame);
     }
-
-    SafeRelease(depthFrame);
-}
-
     // Clean up
     SafeRelease(depthFrameReader);
     SafeRelease(depthFrameSource);
