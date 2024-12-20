@@ -10,29 +10,6 @@
 using namespace std;
 using namespace std::chrono;
 
-// Define pairs of joints to draw skeleton
-const std::vector<std::pair<JointType, JointType>> bones = {
-    { JointType_Head, JointType_Neck },
-    { JointType_Neck, JointType_SpineShoulder },
-    { JointType_SpineShoulder, JointType_SpineMid },
-    { JointType_SpineMid, JointType_SpineBase },
-    { JointType_SpineShoulder, JointType_ShoulderLeft },
-    { JointType_SpineShoulder, JointType_ShoulderRight },
-    { JointType_SpineBase, JointType_HipLeft },
-    { JointType_SpineBase, JointType_HipRight },
-    { JointType_ShoulderLeft, JointType_ElbowLeft },
-    { JointType_ElbowLeft, JointType_WristLeft },
-    { JointType_WristLeft, JointType_HandLeft },
-    { JointType_ShoulderRight, JointType_ElbowRight },
-    { JointType_ElbowRight, JointType_WristRight },
-    { JointType_WristRight, JointType_HandRight },
-    { JointType_HipLeft, JointType_KneeLeft },
-    { JointType_KneeLeft, JointType_AnkleLeft },
-    { JointType_AnkleLeft, JointType_FootLeft },
-    { JointType_HipRight, JointType_KneeRight },
-    { JointType_KneeRight, JointType_AnkleRight },
-    { JointType_AnkleRight, JointType_FootRight }
-};
 
 // Joint tracking and foot position tracking logic
 struct JointTracker {
